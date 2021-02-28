@@ -54,6 +54,7 @@
     <Compile Include="TFileInfo.cs" />
     <Compile Include="TFileSegment.cs" />
     <Compile Include="Util.cs" />
+    <Compile Include="Xp3Enc.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -21,7 +22,7 @@ namespace KrkrzPack
 
             try
             {
-                string localRootPath = Util.MakeDirectoryPath(args[0]);
+                string localRootPath = args[0];
                 string outpuFile = args[1];
 
                 // The "patch.xp3" does not support subdirectories path in file name
@@ -37,8 +38,12 @@ namespace KrkrzPack
                     files.AddLast(source);
                 }
 
+                // Load the encryption module
+                LoadXp3Enc(Path.GetDirectoryName(localRootPath), AppDomain.CurrentDomain.BaseDirectory);
+
                 CreateArchive(files, outpuFile);
 
+                Console.ReadKey();
                 return 0;
             }
             catch (Exception e)
@@ -180,6 +185,12 @@ namespace KrkrzPack
                     files.AddLast(info);
 
                     Console.WriteLine("Storing file: {0}", info.Name);
+
+                    // Encrypt file data
+                    if (Xp3Enc.Loaded)
+                        Xp3Enc.Encrypt(info.Adler32, 0, data);
+
+                    // Store to archive
                     arcWriter.WriteBytes(data);
                 }
 
@@ -254,6 +265,27 @@ namespace KrkrzPack
                 arcWriter.Close();
 
                 Console.WriteLine("Done.");
+            }
+        }
+
+        static void LoadXp3Enc(string sourceFolder, string appFolder)
+        {
+            string fileName = Environment.Is64BitProcess ? "xp3enc64.dll" : "xp3enc.dll";
+
+            // Load dll from source folder
+            string filePath = Path.Combine(sourceFolder, fileName);
+            if (File.Exists(filePath))
+            {
+                if (Xp3Enc.Load(filePath))
+                    return;
+            }
+
+            // Load dll from app folder
+            filePath = Path.Combine(appFolder, fileName);
+            if (File.Exists(filePath))
+            {
+                if (Xp3Enc.Load(filePath))
+                    return;
             }
         }
     }
