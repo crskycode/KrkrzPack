@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CommandLine;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -10,23 +11,41 @@ using System.Threading.Tasks;
 
 namespace KrkrzPack
 {
+    class CommandLineOptions
+    {
+        [Option('s', "source", Required = true, HelpText = "Path to the folder where the files used to create the archive.")]
+        public string SourceFolder { get; set; }
+
+        [Option('o', "output", Required = true, HelpText = "Output archive file path.")]
+        public string OutputFile { get; set; }
+
+        [Option('p', "patch", Required = false, HelpText = "Create a patch.xp3 archive.")]
+        public bool CreatePatch { get; set; }
+
+        [Option('k', "xorkey", Required = false, HelpText = "Xor key for simple encryption.")]
+        public byte? XorKey { get; set; }
+
+        [Option('x', "xp3enc", Required = false, HelpText = "Path to xp3enc.dll for advanced encryption.")]
+        public string Xp3EncPath { get; set; }
+    }
+
     class Program
     {
         static int Main(string[] args)
         {
-            if (args.Length < 2)
+            CommandLineOptions options = null;
+            Parser.Default.ParseArguments<CommandLineOptions>(args)
+                .WithParsed(result => options = result);
+
+            if (options == null)
             {
-                Console.WriteLine(@"Usage: KrkrzPack ""path\to\folder"" ""path\to\output.xp3"" [-p]");
                 return 1;
             }
 
             try
             {
-                string localRootPath = args[0];
-                string outpuFile = args[1];
-
-                // The "patch.xp3" does not support subdirectories path in file name
-                bool makePatch = (args.Length > 2 && args[2] == "-p");
+                string localRootPath = options.SourceFolder;
+                string outpuFile = options.OutputFile;
 
                 LinkedList<TFileSource> files = new LinkedList<TFileSource>();
 
@@ -34,16 +53,12 @@ namespace KrkrzPack
                 {
                     TFileSource source = new TFileSource();
                     source.LocalPath = filePath;
-                    source.Path = makePatch ? Path.GetFileName(filePath) : Util.GetRelativePath(localRootPath, filePath);
+                    source.Path = options.CreatePatch ? Path.GetFileName(filePath) : Util.GetRelativePath(localRootPath, filePath);
                     files.AddLast(source);
                 }
 
-                // Load the encryption module
-                LoadXp3Enc(Path.GetDirectoryName(localRootPath), AppDomain.CurrentDomain.BaseDirectory);
+                CreateArchive(options, files, outpuFile);
 
-                CreateArchive(files, outpuFile);
-
-                Console.ReadKey();
                 return 0;
             }
             catch (Exception e)
@@ -116,8 +131,11 @@ namespace KrkrzPack
             0xa1,0xdf,0x00,0x00,0x00,0x00,0x49,0x45,0x4e,0x44,0xae,0x42,0x60,0x82
         };
 
-        static void CreateArchive(LinkedList<TFileSource> sourceFiles, string outpuFile)
+        static void CreateArchive(CommandLineOptions options, LinkedList<TFileSource> sourceFiles, string outpuFile)
         {
+            // Load encryption module
+            LoadXp3Enc(options.Xp3EncPath);
+
             using (FileStream arcStream = File.Create(outpuFile))
             using (BinaryWriter arcWriter = new BinaryWriter(arcStream))
             {
@@ -189,6 +207,8 @@ namespace KrkrzPack
                     // Encrypt file data
                     if (Xp3Enc.Loaded)
                         Xp3Enc.Encrypt(info.Adler32, 0, data);
+                    else if (options.XorKey != null)
+                        XorEncrypt(data, (byte)options.XorKey);
 
                     // Store to archive
                     arcWriter.WriteBytes(data);
@@ -268,24 +288,22 @@ namespace KrkrzPack
             }
         }
 
-        static void LoadXp3Enc(string sourceFolder, string appFolder)
+        static void LoadXp3Enc(string filePath)
         {
-            string fileName = Environment.Is64BitProcess ? "xp3enc64.dll" : "xp3enc.dll";
+            if (string.IsNullOrEmpty(filePath))
+                return;
 
-            // Load dll from source folder
-            string filePath = Path.Combine(sourceFolder, fileName);
             if (File.Exists(filePath))
             {
-                if (Xp3Enc.Load(filePath))
-                    return;
+                Xp3Enc.Load(filePath);
             }
+        }
 
-            // Load dll from app folder
-            filePath = Path.Combine(appFolder, fileName);
-            if (File.Exists(filePath))
+        static void XorEncrypt(byte[] buffer, byte key)
+        {
+            for (int i = 0; i < buffer.Length; i++)
             {
-                if (Xp3Enc.Load(filePath))
-                    return;
+                buffer[i] ^= key;
             }
         }
     }
