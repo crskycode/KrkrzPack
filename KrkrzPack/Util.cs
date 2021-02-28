@@ -22,11 +22,9 @@ namespace KrkrzPack
 
         public static string GetRelativePath(string pathFrom, string pathTo)
         {
-            Uri uri = new Uri(pathFrom);
+            Uri uri = new Uri(Util.MakeDirectoryPath(pathFrom));
             string relativePath = Uri.UnescapeDataString(uri.MakeRelativeUri(new Uri(pathTo)).ToString());
             relativePath = relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            if (!relativePath.Contains(Path.DirectorySeparatorChar.ToString()))
-                relativePath = "." + Path.DirectorySeparatorChar + relativePath;
             return relativePath;
         }
 
